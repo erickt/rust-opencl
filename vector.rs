@@ -10,7 +10,7 @@ use std::vec;
 use std::cast;
 use std::unstable;
 
-struct Vector<T> {
+pub struct Vector<T> {
     cl_buffer: cl_mem,
     size:      uint,
     context:   @ComputeContext,
@@ -39,10 +39,6 @@ impl<T> Vector<T> {
                 ptr::to_unsafe_ptr(&status));
                 check(status, "Could not allocate buffer");
 
-                //let status = clEnqueueWriteBuffer(
-                //    ctx.q, buf, CL_TRUE, 0, byte_size, p as *libc::c_void,
-                //    0, ptr::null(), ptr::null());
-
                 Vector {
                     cl_buffer: buf,
                     size:      len,
@@ -52,24 +48,12 @@ impl<T> Vector<T> {
         }
     }
  
-    #[fixed_stack_segment] #[inline(never)]
     pub fn rewrite(&mut self, v: &[T]) {
         if self.size < v.len() {
             fail!("Cannot copy cpu buffer on a smaller gpu buffer.")
         }
 
-        unsafe {
-            do v.as_imm_buf |p, len|
-            {
-                let byte_size = (len * mem::size_of::<T>()) as libc::size_t;
-
-                let status = clEnqueueWriteBuffer(
-                    self.context.q.cqueue, self.cl_buffer, CL_TRUE, 0, byte_size, p as *libc::c_void,
-                    0, ptr::null(), ptr::null());
-
-                check(status, "Could not write buffer");
-            }
-        }
+        self.context.q.write_buffer(self, 0, v, ());
     }
 
     pub fn to_vec(self) -> ~[T] {
@@ -84,20 +68,12 @@ impl<T> Vector<T> {
         }
     }
 
-    #[fixed_stack_segment] #[inline(never)]
     pub fn to_existing_vec(&self, out: &mut [T]) {
         if out.len() < self.size {
             fail!("Cannot copy gpu buffer on a smaller cpu buffer.")
         }
 
-        unsafe {
-            do out.as_imm_buf |p, len| {
-                clEnqueueReadBuffer(
-                    self.context.q.cqueue, self.cl_buffer, CL_TRUE, 0,
-                    (len * mem::size_of::<T>()) as libc::size_t,
-                    p as *libc::c_void, 0, ptr::null(), ptr::null());
-            }
-        }
+        self.context.q.read_buffer(self, 0, out, ());
     }
 }
 
@@ -109,23 +85,18 @@ impl<T> hl::KernelArg for Vector<T>
     }
 }
 
-struct CLBuffer {
-    cl_buffer: cl_mem
+impl<T> hl::Buffer for Vector<T>
+{
+    fn get_id(&self) -> cl_mem 
+    {
+        self.cl_buffer
+    }   
 }
 
 pub struct Unique<T> {
     cl_buffer: CLBuffer,
     size: uint,
     context: @ComputeContext,
-}
-
-impl Drop for CLBuffer {
-    #[fixed_stack_segment] #[inline(never)]
-    fn drop(&mut self) {
-        unsafe {
-            clReleaseMemObject(self.cl_buffer);
-        }
-    }
 }
 
 impl<T> Unique<T> {
