@@ -7,6 +7,7 @@ use std::rt::io::extensions::ReaderUtil;
 use std::str;
 
 
+
 fn main()
 {
 	let ker = file::open(&std::path::Path::new("./test.ocl"), io::Open, io::Read).read_to_end();
@@ -20,9 +21,9 @@ fn main()
 
 	println!("{:?}", ctx.device_name());
 
-	let A = ctx.ctx.create_buffer(vec_a.len() * mem::size_of_val(&vec_a[0]), OpenCL::CL::CL_MEM_READ_ONLY);
-	let B = ctx.ctx.create_buffer(vec_a.len() * mem::size_of_val(&vec_a[0]), OpenCL::CL::CL_MEM_READ_ONLY);
-	let C = ctx.ctx.create_buffer(vec_a.len() * mem::size_of_val(&vec_a[0]), OpenCL::CL::CL_MEM_WRITE_ONLY);
+	let A : OpenCL::hl::CLBuffer<int> = ctx.ctx.create_buffer(vec_a.len(), OpenCL::CL::CL_MEM_READ_ONLY);
+	let B : OpenCL::hl::CLBuffer<int> = ctx.ctx.create_buffer(vec_a.len(), OpenCL::CL::CL_MEM_READ_ONLY);
+	let C : OpenCL::hl::CLBuffer<int> = ctx.ctx.create_buffer(vec_a.len(), OpenCL::CL::CL_MEM_WRITE_ONLY);
 
 	ctx.q.write_buffer(&A, 0, vec_a, ());
 	ctx.q.write_buffer(&B, 0, vec_b, ());
