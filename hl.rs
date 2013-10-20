@@ -186,6 +186,23 @@ impl Context {
             CLBuffer{cl_buffer: buf}
         }
     }
+
+    #[fixed_stack_segment] #[inline(never)]
+    pub fn create_buffer_from_vec<T>(&self, vec: &[T]) -> CLBuffer<T>
+    {
+        unsafe {
+            do vec.as_imm_buf |p, len| {
+                let status = 0;
+                let buf = clCreateBuffer(self.ctx,
+                                         CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                                         (len*mem::size_of::<T>()) as libc::size_t ,
+                                         p as *libc::c_void,
+                                         ptr::to_unsafe_ptr(&status));
+                check(status, "Could not allocate buffer");
+                CLBuffer{cl_buffer: buf}
+            }
+        }
+    }
 }
 
 impl Drop for Context
@@ -918,9 +935,8 @@ mod test {
         prog.build(ctx.device);
 
         let k = prog.create_kernel("test");
-
-        let v = Vector::from_vec(ctx, [1]);
-
+        let v = ctx.ctx.create_buffer_from_vec([1]);
+        
         k.set_arg(0, &v);
 
         enqueue_nd_range_kernel(
@@ -928,7 +944,7 @@ mod test {
             &k,
             1, 0, 1, 1);
 
-        let v = v.to_vec();
+        let v = ctx.q.read(&v, ());
 
         expect!(v[0], 2);
     }
@@ -943,9 +959,9 @@ mod test {
         prog.build(ctx.device);
 
         let k = prog.create_kernel("test");
-
-        let v = Vector::from_vec(ctx, [1]);
-
+        
+        let v = ctx.ctx.create_buffer_from_vec([1]);
+        
         k.set_arg(0, &v);
         k.set_arg(1, &42);
 
@@ -953,7 +969,8 @@ mod test {
               &ctx.q,
               &k,
               1, 0, 1, 1);
-        let v = v.to_vec();
+
+        let v = ctx.q.read(&v, ());
 
         expect!(v[0], 43);
   }
@@ -969,12 +986,13 @@ mod test {
 
         let k = prog.create_kernel("test");
 
-        let v = Vector::from_vec(ctx, [1]);
-
+        let v = ctx.ctx.create_buffer_from_vec([1]);
+      
         k.set_arg(0, &v);
 
         ctx.enqueue_async_kernel(&k, 1, None, ()).wait();
-        let v = v.to_vec();
+      
+        let v = ctx.q.read(&v, ());
 
         expect!(v[0], 2);
     }
@@ -989,9 +1007,8 @@ mod test {
         prog.build(ctx.device);
 
         let k = prog.create_kernel("test");
-
-        let v = Vector::from_vec(ctx, [1]);
-
+        let v = ctx.ctx.create_buffer_from_vec([1]);
+      
         k.set_arg(0, &v);
 
         let mut e : Option<Event> = None;
@@ -999,8 +1016,8 @@ mod test {
             e = Some(ctx.enqueue_async_kernel(&k, 1, None, e));
         }
         e.wait();
-
-        let v = v.to_vec();
+      
+        let v = ctx.q.read(&v, ());
 
         expect!(v[0], 9);
     }
@@ -1020,11 +1037,11 @@ mod test {
         let k_incA = prog.create_kernel("inc");
         let k_incB = prog.create_kernel("inc");
         let k_add = prog.create_kernel("add");
-
-        let a = Vector::from_vec(ctx, [1]);
-        let b = Vector::from_vec(ctx, [1]);
-        let c = Vector::from_vec(ctx, [1]);
-
+        
+        let a = ctx.ctx.create_buffer_from_vec([1]);
+        let b = ctx.ctx.create_buffer_from_vec([1]);
+        let c = ctx.ctx.create_buffer_from_vec([1]);
+      
         k_incA.set_arg(0, &a);
         k_incB.set_arg(0, &b);
         let event_list = &[
@@ -1035,9 +1052,9 @@ mod test {
         k_add.set_arg(0, &a);
         k_add.set_arg(1, &b);
         k_add.set_arg(2, &c);
-
-        ctx.enqueue_async_kernel(&k_add, 1, None, event_list).wait();
-        let v = c.to_vec();
+        let event = ctx.enqueue_async_kernel(&k_add, 1, None, event_list);
+      
+        let v = ctx.q.read(&c, event);
 
         expect!(v[0], 4);
     }
@@ -1064,15 +1081,15 @@ mod test {
         }
 
         let k = prog.create_kernel("test");
-
-        let v = Vector::from_vec(ctx, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
-
+        
+        let v = ctx.ctx.create_buffer_from_vec([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        
         k.set_arg(0, &v);
 
         ctx.enqueue_async_kernel(&k, (3, 3), None, ()).wait();
-
-        let v = v.to_vec();
-
+        
+        let v = ctx.q.read(&v, ());
+        
         expect!(v, ~[0, 0, 0, 0, 1, 2, 0, 2, 4]);
     }
 
@@ -1094,12 +1111,9 @@ mod test {
     #[test]
     fn memory_read_vec()
     {
-        let ctx = create_compute_context();
-        let buffer : CLBuffer<int> = ctx.ctx.create_buffer(8, CL_MEM_READ_ONLY);
-
         let input = ~[0, 1, 2, 3, 4, 5, 6, 7];
-
-        ctx.q.write_buffer(&buffer, 0, input, ());
+        let ctx = create_compute_context();
+        let buffer : CLBuffer<int> = ctx.ctx.create_buffer_from_vec(input);
         let output = ctx.q.read(&buffer, ());
         expect!(input, output);
     }
