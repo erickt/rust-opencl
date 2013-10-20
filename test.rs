@@ -15,7 +15,6 @@ fn main()
 
 	let vec_a: &[int] = &[0, 1, 2, -3, 4, 5, 6, 7];
 	let vec_b: &[int] = &[-7, -6, 5, -4, 0, -1, 2, 3];
-	let vec_c: &mut [int] = &mut [0, 0, 0, 0, 0, 0, 0, 0];
 
 	let ctx = OpenCL::hl::create_compute_context();
 
@@ -40,7 +39,7 @@ fn main()
 
 	OpenCL::hl::enqueue_nd_range_kernel(&ctx.q, &kernel, 1, 0, 8, 8);
 
-	ctx.q.read_buffer(&C, 0, vec_c, ());
+	let vec_c = ctx.q.read(&C, ());
 
 	println!("	{:?}", vec_a);
 	println!("+	{:?}", vec_b);
