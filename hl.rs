@@ -890,10 +890,9 @@ mod test {
         k.set_arg(1, &42);
 
         enqueue_nd_range_kernel(
-          &ctx.q,
-          &k,
-          1, 0, 1, 1);
-
+              &ctx.q,
+              &k,
+              1, 0, 1, 1);
         let v = v.to_vec();
 
         expect!(v[0], 43);
