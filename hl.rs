@@ -306,7 +306,7 @@ impl CommandQueue
     }
 
     #[fixed_stack_segment] #[inline(never)]
-    pub fn read_buffer<T, B: Buffer<T>, E: EventList>(&self, mem: &B, offset: uint, read: &[T], event: E)
+    pub fn read_buffer<T, B: Buffer<T>, E: EventList>(&self, mem: &B, offset: uint, read: &mut [T], event: E)
     {
         unsafe {
             do event.as_event_list |evt, evt_len| {
@@ -354,7 +354,7 @@ impl CommandQueue
     // this is unsafe since freeing of write after enqueueing
     // can cause undefined behavior
     #[fixed_stack_segment] #[inline(never)]
-    pub unsafe fn read_buffer_async<T, B: Buffer<T>, E: EventList>(&self, mem: &B, offset: uint, read: &[T], event: E) -> Event
+    pub unsafe fn read_buffer_async<T, B: Buffer<T>, E: EventList>(&self, mem: &B, offset: uint, read: &mut [T], event: E) -> Event
     {
         do event.as_event_list |evt, evt_len| {
             do read.as_imm_buf |p, len| {
@@ -1136,7 +1136,7 @@ mod test {
         let buffer : CLBuffer<int> = ctx.ctx.create_buffer(8, CL_MEM_READ_ONLY);
 
         let input = ~[0, 1, 2, 3, 4, 5, 6, 7];
-        let output = ~[0, 0, 0, 0, 0, 0, 0, 0];
+        let mut output = ~[0, 0, 0, 0, 0, 0, 0, 0];
 
         ctx.q.write_buffer(&buffer, 0, input, ());
         ctx.q.read_buffer(&buffer, 0, output, ());
