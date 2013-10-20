@@ -6,6 +6,7 @@ use std::rt::io::file;
 use std::rt::io::extensions::ReaderUtil;
 use std::str;
 
+
 fn main()
 {
 	let ker = file::open(&std::path::Path::new("./test.ocl"), io::Open, io::Read).read_to_end();
