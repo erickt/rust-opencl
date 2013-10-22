@@ -14,11 +14,7 @@ use std::mem;
 use std::cast;
 use std::ptr;
 
-struct Platform {
-    id: cl_platform_id
-}
-
-    enum DeviceType {
+enum DeviceType {
       CPU, GPU
 }
 
@@ -29,24 +25,50 @@ fn convert_device_type(device: DeviceType) -> cl_device_type {
     }
 }
 
+struct Platform {
+    id: cl_platform_id
+}
+
 impl Platform {
-    pub fn get_devices(&self) -> ~[Device]
+    #[fixed_stack_segment] #[inline(never)]
+    fn get_devices_internal(&self, dtype: cl_device_type) -> ~[Device]
     {
-        get_devices(*self, CL_DEVICE_TYPE_ALL)
+        unsafe
+        {
+            let num_devices = 0;
+            
+            info!("Looking for devices matching {:?}", dtype);
+            
+            clGetDeviceIDs(self.id, dtype, 0, ptr::null(), 
+                           ptr::to_unsafe_ptr(&num_devices));
+
+            let ids = vec::from_elem(num_devices as uint, 0 as cl_device_id);
+            do ids.as_imm_buf |ids, len| {
+                clGetDeviceIDs(self.id, dtype, len as cl_uint,
+                               ids, ptr::to_unsafe_ptr(&num_devices));
+            };
+
+            do ids.map |id| { Device {id: *id }}
+        }
     }
 
-    fn get_devices_by_types(&self, types: &[DeviceType]) -> ~[Device]
+    pub fn get_devices(&self) -> ~[Device]
+    {
+        self.get_devices_internal(CL_DEVICE_TYPE_ALL)
+    }
+
+    pub fn get_devices_by_types(&self, types: &[DeviceType]) -> ~[Device]
     {
         let dtype = 0;
         for &t in types.iter() {
           dtype != convert_device_type(t);
         }
 
-        get_devices(*self, dtype)
+        self.get_devices_internal(dtype)
     }
 
     #[fixed_stack_segment] #[inline(never)]
-    fn name(&self) -> ~str
+    pub fn name(&self) -> ~str
     {
         unsafe {
             let mut size = 0;
@@ -143,29 +165,31 @@ impl Device {
 		}
 	}
 
-}
 
-#[fixed_stack_segment] #[inline(never)]
-pub fn get_devices(platform: Platform, dtype: cl_device_type) -> ~[Device]
-{
-    unsafe
+    #[fixed_stack_segment] #[inline(never)]
+    pub fn create_context(&self) -> Context
     {
-        let num_devices = 0;
+        unsafe
+        {
+            // TODO: Support for multiple devices
+            let errcode = 0;
 
-        info!("Looking for devices matching {:?}", dtype);
+            // TODO: Proper error messages
+            let ctx = clCreateContext(ptr::null(),
+                                      1,
+                                      ptr::to_unsafe_ptr(&self.id),
+                                      cast::transmute(ptr::null::<&fn ()>()),
+                                      ptr::null(),
+                                      ptr::to_unsafe_ptr(&errcode));
 
-        clGetDeviceIDs(platform.id, dtype, 0, ptr::null(),
-                       ptr::to_unsafe_ptr(&num_devices));
+            check(errcode, "Failed to create opencl context!");
 
-        let ids = vec::from_elem(num_devices as uint, 0 as cl_device_id);
-        do ids.as_imm_buf |ids, len| {
-            clGetDeviceIDs(platform.id, dtype, len as cl_uint,
-                           ids, ptr::to_unsafe_ptr(&num_devices));
-        };
-
-        do ids.map |id| { Device {id: *id }}
+            Context { ctx: ctx }
+        }
     }
 }
+
+
 
 struct Context {
     ctx: cl_context,
@@ -203,6 +227,65 @@ impl Context {
             }
         }
     }
+
+    #[fixed_stack_segment] #[inline(never)]
+    pub fn create_command_queue(&self, device: &Device) -> CommandQueue
+    {
+        unsafe
+        {
+            let errcode = 0;
+            
+            let cqueue = clCreateCommandQueue(self.ctx, device.id, 0,
+                                              ptr::to_unsafe_ptr(&errcode));
+            
+            check(errcode, "Failed to create command queue!");
+            
+            CommandQueue {
+                cqueue: cqueue
+            }
+        }
+    }
+
+    #[fixed_stack_segment] #[inline(never)]
+    pub fn create_program_from_source(&self, src: &str) -> Program
+    {
+        unsafe
+        {
+            do src.to_c_str().with_ref |src| {
+                let status = CL_SUCCESS as cl_int;
+                let program = clCreateProgramWithSource(
+                    self.ctx,
+                    1,
+                    ptr::to_unsafe_ptr(&src),
+                    ptr::null(),
+                    ptr::to_unsafe_ptr(&status));
+                check(status, "Could not create program");
+
+                Program { prg: program }
+            }
+        }
+    }
+
+    #[fixed_stack_segment] #[inline(never)]
+    pub fn create_program_from_binary(&self, bin: &str, device: &Device) -> Program {
+        do bin.to_c_str().with_ref |src| {
+            let status = CL_SUCCESS as cl_int;
+            let len = bin.len() as libc::size_t;
+            let program = unsafe {
+                clCreateProgramWithBinary(
+                    self.ctx,
+                    1,
+                    ptr::to_unsafe_ptr(&device.id),
+                    ptr::to_unsafe_ptr(&len),
+                    ptr::to_unsafe_ptr(&src) as **libc::c_uchar,
+                    ptr::null(),
+                    ptr::to_unsafe_ptr(&status))
+            };
+            check(status, "Could not create program");
+
+            Program {prg: program}
+        }
+    }
 }
 
 impl Drop for Context
@@ -215,27 +298,6 @@ impl Drop for Context
     }
 }
 
-#[fixed_stack_segment] #[inline(never)]
-pub fn create_context(device: Device) -> Context
-{
-    unsafe
-    {
-        // TODO: Support for multiple devices
-        let errcode = 0;
-
-        // TODO: Proper error messages
-        let ctx = clCreateContext(ptr::null(),
-                                  1,
-                                  ptr::to_unsafe_ptr(&device.id),
-                                  cast::transmute(ptr::null::<&fn ()>()),
-                                  ptr::null(),
-                                  ptr::to_unsafe_ptr(&errcode));
-
-        check(errcode, "Failed to create opencl context!");
-
-        Context { ctx: ctx }
-    }
-}
 
 trait Buffer<T> {
     fn id(&self) -> cl_mem;
@@ -293,12 +355,38 @@ impl<T> KernelArg for CLBuffer<T> {
 } 
 
 pub struct CommandQueue {
-    cqueue: cl_command_queue,
-    device: Device,
+    cqueue: cl_command_queue
 }
 
 impl CommandQueue
 {
+    #[fixed_stack_segment] #[inline(never)]
+    pub fn enqueue_async_kernel<I: KernelIndex, E: EventList>(&self, k: &Kernel, global: I, local: Option<I>, wait_on: E)
+        -> Event
+    {
+        unsafe
+        {
+            do wait_on.as_event_list |event, event_count| {
+                let e: cl_event = ptr::null();
+                let status = clEnqueueNDRangeKernel(
+                    self.cqueue,
+                    k.kernel,
+                    KernelIndex::num_dimensions(None::<I>),
+                    ptr::null(),
+                    global.get_ptr(),
+                    match local {
+                        Some(ref l) => l.get_ptr(),
+                        None => ptr::null()
+                    },
+                    event_count,
+                    event,
+                    ptr::to_unsafe_ptr(&e));
+                check(status, "Error enqueuing kernel.");
+                Event { event: e }
+            }
+        }
+    }
+
     pub fn read<T, B: Buffer<T>, E: EventList>(&self, mem: &B, event: E) -> ~[T]
     {
         let mut v: ~[T] = vec::with_capacity(mem.len());
@@ -402,7 +490,6 @@ impl CommandQueue
     }
 }
 
-
 impl Drop for CommandQueue
 {
     #[fixed_stack_segment] #[inline(never)]
@@ -413,25 +500,6 @@ impl Drop for CommandQueue
     }
 }
 
-
-#[fixed_stack_segment] #[inline(never)]
-pub fn create_command_queue(ctx: & Context, device: Device) -> CommandQueue
-{
-    unsafe
-    {
-        let errcode = 0;
-        
-        let cqueue = clCreateCommandQueue(ctx.ctx, device.id, 0,
-                                          ptr::to_unsafe_ptr(&errcode));
-        
-        check(errcode, "Failed to create command queue!");
-        
-        CommandQueue {
-            cqueue: cqueue,
-            device: device
-        }
-    }
-}
 
 pub struct Program
 {
@@ -695,164 +763,6 @@ impl EventList for () {
     }
 }
 
-/**
-This packages an OpenCL context, a device, and a command queue to
-simplify handling all these structures.
-*/
-pub struct ComputeContext
-{
-    device: Device,
-    q:      CommandQueue,
-    ctx:    Context,
-}
-
-impl ComputeContext
-{
-	// TODO: How to make this function cleaner and nice
-/*
-	#[fixed_stack_segment] #[inline(never)]
-	pub fn create_buffer(@self, len: uint, flags: cl_mem_flags) -> Buffer
-	{
-   		unsafe
-    	{
-        	let errcode = 0;
-        	let buffer = clCreateBuffer(self.ctx.ctx,
-									flags,
-                                    len as libc::size_t,
-									ptr::null(),
-                                    ptr::to_unsafe_ptr(&errcode));
-
-        check(errcode, "Failed to create buffer!");
-
-        Buffer { buffer: buffer, size: len}
-    	}
-	}
-*/
-
-    #[fixed_stack_segment] #[inline(never)]
-    pub fn create_program_from_source(@self, src: &str) -> Program
-    {
-        unsafe
-        {
-            do src.to_c_str().with_ref |src| {
-                let status = CL_SUCCESS as cl_int;
-                let program = clCreateProgramWithSource(
-                    self.ctx.ctx,
-                    1,
-                    ptr::to_unsafe_ptr(&src),
-                    ptr::null(),
-                    ptr::to_unsafe_ptr(&status));
-                check(status, "Could not create program");
-
-                Program { prg: program }
-            }
-        }
-    }
-
-    #[fixed_stack_segment] #[inline(never)]
-    pub fn create_program_from_binary(@self, bin: &str) -> Program {
-        do bin.to_c_str().with_ref |src| {
-            let status = CL_SUCCESS as cl_int;
-            let len = bin.len() as libc::size_t;
-            let program = unsafe {
-                clCreateProgramWithBinary(
-                    self.ctx.ctx,
-                    1,
-                    ptr::to_unsafe_ptr(&self.device.id),
-                    ptr::to_unsafe_ptr(&len),
-                    ptr::to_unsafe_ptr(&src) as **libc::c_uchar,
-                    ptr::null(),
-                    ptr::to_unsafe_ptr(&status))
-            };
-            check(status, "Could not create program");
-
-            Program {
-                prg: program,
-            }
-        }
-    }
-
-    #[fixed_stack_segment] #[inline(never)]
-    pub fn enqueue_async_kernel<I: KernelIndex, E: EventList>(&self, k: &Kernel, global: I, local: Option<I>, wait_on: E)
-        -> Event
-        {
-            unsafe
-            {
-                do wait_on.as_event_list |event, event_count| {
-                    let e: cl_event = ptr::null();
-                    let status = clEnqueueNDRangeKernel(
-                        self.q.cqueue,
-                        k.kernel,
-                        KernelIndex::num_dimensions(None::<I>),
-                        ptr::null(),
-                        global.get_ptr(),
-                        match local {
-                            Some(ref l) => l.get_ptr(),
-                            None => ptr::null()
-                        },
-                        event_count,
-                        event,
-                        ptr::to_unsafe_ptr(&e));
-                    check(status, "Error enqueuing kernel.");
-                    Event { event: e }
-                }
-            }
-        }
-
-    pub fn device_name(&self) -> ~str {
-        self.device.name()
-    }
-}
-
-pub fn create_compute_context() -> @ComputeContext {
-  // Enumerate all platforms until we find a device that works.
-
-  let platforms = get_platforms();
-
-  for p in platforms.iter()
-  {
-    let devices = p.get_devices();
-
-    if devices.len() > 0
-    {
-      let device = devices[0];
-      let ctx    = create_context(device);
-      let q      = create_command_queue(&ctx, device);
-
-      return @ComputeContext
-      {
-        ctx:    ctx,
-        device: device,
-        q:      q
-      }
-    }
-  }
-
-  fail!("No suitable device found")
-}
-
-pub fn create_compute_context_types(types: &[DeviceType]) -> @ComputeContext {
-    // Enumerate all platforms until we find a device that works.
-
-    let platforms = get_platforms();
-
-    for p in platforms.iter() {
-        let devices = p.get_devices_by_types(types);
-        if devices.len() > 0 {
-            let device = devices[0];
-            let ctx = create_context(device);
-            let q = create_command_queue(&ctx, device);
-            return @ComputeContext {
-                ctx: ctx,
-                device: device,
-                q: q
-            }
-        }
-    }
-
-    fail!(~"Could not find an acceptable device.")
-}
-
 trait KernelIndex
 {
     fn num_dimensions(dummy_self: Option<Self>) -> cl_uint;
@@ -902,6 +812,7 @@ mod test {
     use vector::Vector;
     use std::rt::io;
     use std::io;
+    use util;
 
     macro_rules! expect (
         ($test: expr, $expected: expr) => ({
@@ -920,9 +831,9 @@ mod test {
         let src = "__kernel void test(__global int *i) { \
                    *i += 1; \
                    }";
-        let ctx = create_compute_context();
+        let (_, device, ctx, _) = util::create_compute_context().unwrap();
         let prog = ctx.create_program_from_source(src);
-        prog.build(ctx.device);
+        prog.build(device);
     }
 
     #[test]
@@ -930,21 +841,21 @@ mod test {
         let src = "__kernel void test(__global int *i) { \
                    *i += 1; \
                    }";
-        let ctx = create_compute_context();
+        let (_, device, ctx, queue) = util::create_compute_context().unwrap();
         let prog = ctx.create_program_from_source(src);
-        prog.build(ctx.device);
+        prog.build(device);
 
         let k = prog.create_kernel("test");
-        let v = ctx.ctx.create_buffer_from_vec([1]);
+        let v = ctx.create_buffer_from_vec([1]);
         
         k.set_arg(0, &v);
 
         enqueue_nd_range_kernel(
-            &ctx.q,
+            &queue,
             &k,
             1, 0, 1, 1);
 
-        let v = ctx.q.read(&v, ());
+        let v = queue.read(&v, ());
 
         expect!(v[0], 2);
     }
@@ -954,23 +865,23 @@ mod test {
         let src = "__kernel void test(__global int *i, long int k) { \
                    *i += k; \
                    }";
-        let ctx = create_compute_context();
+        let (_, device, ctx, queue) = util::create_compute_context().unwrap();
         let prog = ctx.create_program_from_source(src);
-        prog.build(ctx.device);
+        prog.build(device);
 
         let k = prog.create_kernel("test");
         
-        let v = ctx.ctx.create_buffer_from_vec([1]);
+        let v = ctx.create_buffer_from_vec([1]);
         
         k.set_arg(0, &v);
         k.set_arg(1, &42);
 
         enqueue_nd_range_kernel(
-              &ctx.q,
+              &queue,
               &k,
               1, 0, 1, 1);
 
-        let v = ctx.q.read(&v, ());
+        let v = queue.read(&v, ());
 
         expect!(v[0], 43);
   }
@@ -980,19 +891,19 @@ mod test {
         let src = "__kernel void test(__global int *i) { \
                    *i += 1; \
                    }";
-        let ctx = create_compute_context();
+        let (_, device, ctx, queue) = util::create_compute_context().unwrap();
         let prog = ctx.create_program_from_source(src);
-        prog.build(ctx.device);
+        prog.build(device);
 
         let k = prog.create_kernel("test");
 
-        let v = ctx.ctx.create_buffer_from_vec([1]);
+        let v = ctx.create_buffer_from_vec([1]);
       
         k.set_arg(0, &v);
 
-        ctx.enqueue_async_kernel(&k, 1, None, ()).wait();
+        queue.enqueue_async_kernel(&k, 1, None, ()).wait();
       
-        let v = ctx.q.read(&v, ());
+        let v = queue.read(&v, ());
 
         expect!(v[0], 2);
     }
@@ -1002,22 +913,22 @@ mod test {
         let src = "__kernel void test(__global int *i) { \
                    *i += 1; \
                    }";
-        let ctx = create_compute_context();
+        let (_, device, ctx, queue) = util::create_compute_context().unwrap();
         let prog = ctx.create_program_from_source(src);
-        prog.build(ctx.device);
+        prog.build(device);
 
         let k = prog.create_kernel("test");
-        let v = ctx.ctx.create_buffer_from_vec([1]);
+        let v = ctx.create_buffer_from_vec([1]);
       
         k.set_arg(0, &v);
 
         let mut e : Option<Event> = None;
         for _ in range(0, 8) {
-            e = Some(ctx.enqueue_async_kernel(&k, 1, None, e));
+            e = Some(queue.enqueue_async_kernel(&k, 1, None, e));
         }
         e.wait();
       
-        let v = ctx.q.read(&v, ());
+        let v = queue.read(&v, ());
 
         expect!(v[0], 9);
     }
@@ -1030,31 +941,31 @@ mod test {
                    __kernel void add(__global int *a, __global int *b, __global int *c) { \
                    *c = *a + *b; \
                    }";
-        let ctx = create_compute_context();
+        let (_, device, ctx, queue) = util::create_compute_context().unwrap();
         let prog = ctx.create_program_from_source(src);
-        prog.build(ctx.device);
+        prog.build(device);
 
         let k_incA = prog.create_kernel("inc");
         let k_incB = prog.create_kernel("inc");
         let k_add = prog.create_kernel("add");
         
-        let a = ctx.ctx.create_buffer_from_vec([1]);
-        let b = ctx.ctx.create_buffer_from_vec([1]);
-        let c = ctx.ctx.create_buffer_from_vec([1]);
+        let a = ctx.create_buffer_from_vec([1]);
+        let b = ctx.create_buffer_from_vec([1]);
+        let c = ctx.create_buffer_from_vec([1]);
       
         k_incA.set_arg(0, &a);
         k_incB.set_arg(0, &b);
         let event_list = &[
-            ctx.enqueue_async_kernel(&k_incA, 1, None, ()),
-            ctx.enqueue_async_kernel(&k_incB, 1, None, ()),
+            queue.enqueue_async_kernel(&k_incA, 1, None, ()),
+            queue.enqueue_async_kernel(&k_incB, 1, None, ()),
         ];
 
         k_add.set_arg(0, &a);
         k_add.set_arg(1, &b);
         k_add.set_arg(2, &c);
-        let event = ctx.enqueue_async_kernel(&k_add, 1, None, event_list);
+        let event = queue.enqueue_async_kernel(&k_add, 1, None, event_list);
       
-        let v = ctx.q.read(&c, event);
+        let v = queue.read(&c, event);
 
         expect!(v[0], 4);
     }
@@ -1068,10 +979,10 @@ mod test {
                    int s = get_global_size(0); \
                    N[i * s + j] = i * j;
 }";
-        let ctx = create_compute_context();
+        let (_, device, ctx, queue) = util::create_compute_context().unwrap();
         let prog = ctx.create_program_from_source(src);
 
-        match prog.build(ctx.device) {
+        match prog.build(device) {
             Ok(()) => (),
             Err(build_log) => {
                 println!("Error building program:\n");
@@ -1082,13 +993,13 @@ mod test {
 
         let k = prog.create_kernel("test");
         
-        let v = ctx.ctx.create_buffer_from_vec([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        let v = ctx.create_buffer_from_vec([1, 2, 3, 4, 5, 6, 7, 8, 9]);
         
         k.set_arg(0, &v);
 
-        ctx.enqueue_async_kernel(&k, (3, 3), None, ()).wait();
+        queue.enqueue_async_kernel(&k, (3, 3), None, ()).wait();
         
-        let v = ctx.q.read(&v, ());
+        let v = queue.read(&v, ());
         
         expect!(v, ~[0, 0, 0, 0, 1, 2, 0, 2, 4]);
     }
@@ -1096,14 +1007,14 @@ mod test {
     #[test]
     fn memory_read_write()
     {
-        let ctx = create_compute_context();
-        let buffer : CLBuffer<int> = ctx.ctx.create_buffer(8, CL_MEM_READ_ONLY);
+        let (_, _, ctx, queue) = util::create_compute_context().unwrap();
+        let buffer : CLBuffer<int> = ctx.create_buffer(8, CL_MEM_READ_ONLY);
 
         let input = ~[0, 1, 2, 3, 4, 5, 6, 7];
         let mut output = ~[0, 0, 0, 0, 0, 0, 0, 0];
 
-        ctx.q.write_buffer(&buffer, 0, input, ());
-        ctx.q.read_buffer(&buffer, 0, output, ());
+        queue.write_buffer(&buffer, 0, input, ());
+        queue.read_buffer(&buffer, 0, output, ());
 
         expect!(input, output);
     }
@@ -1112,9 +1023,9 @@ mod test {
     fn memory_read_vec()
     {
         let input = ~[0, 1, 2, 3, 4, 5, 6, 7];
-        let ctx = create_compute_context();
-        let buffer : CLBuffer<int> = ctx.ctx.create_buffer_from_vec(input);
-        let output = ctx.q.read(&buffer, ());
+        let (_, _, ctx, queue) = util::create_compute_context().unwrap();
+        let buffer : CLBuffer<int> = ctx.create_buffer_from_vec(input);
+        let output = queue.read(&buffer, ());
         expect!(input, output);
     }
 }
