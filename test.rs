@@ -5,7 +5,7 @@ use std::rt::io::file;
 use std::rt::io::extensions::ReaderUtil;
 use std::str;
 use OpenCL::hl::EventList;
-
+use OpenCL::mem::Buffer;
 
 fn main()
 {
@@ -19,12 +19,13 @@ fn main()
 
 	println!("{:?}", device.name());
 
-	let A : OpenCL::mem::CLBuffer<int> = ctx.create_buffer(vec_a.len(), OpenCL::CL::CL_MEM_READ_ONLY);
-	let B : OpenCL::mem::CLBuffer<int> = ctx.create_buffer(vec_a.len(), OpenCL::CL::CL_MEM_READ_ONLY);
-	let C : OpenCL::mem::CLBuffer<int> = ctx.create_buffer(vec_a.len(), OpenCL::CL::CL_MEM_WRITE_ONLY);
+	let A : ~Buffer<int> = ctx.create_buffer(vec_a.len(), OpenCL::CL::CL_MEM_READ_ONLY);
+	let B : ~Buffer<int> = ctx.create_buffer(vec_a.len(), OpenCL::CL::CL_MEM_READ_ONLY);
+	let C : ~Buffer<int> = ctx.create_buffer(vec_a.len(), OpenCL::CL::CL_MEM_WRITE_ONLY);
 
-	queue.write(&A, 0, vec_a, ());
-	queue.write(&B, 0, vec_b, ());
+	queue.write(A, &vec_a, ());
+	queue.write(A, &vec_a, ());
+	queue.write(B, &vec_b, ());
 
 	let program = ctx.create_program_from_source(ker);
 
@@ -38,7 +39,7 @@ fn main()
 
 	queue.enqueue_async_kernel(&kernel, 8, None, ()).wait();
 
-	let vec_c: ~[int] = queue.get(&C as &OpenCL::mem::Buffer<int>, ());
+	let vec_c: ~[int] = queue.get(C, ());
 
 	println!("	{:?}", vec_a);
 	println!("+	{:?}", vec_b);
