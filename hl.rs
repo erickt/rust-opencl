@@ -709,7 +709,7 @@ mod test {
         })
     )
 
-      #[test]
+    #[test]
     fn program_build() {
         let src = "__kernel void test(__global int *i) { \
                    *i += 1; \
@@ -752,7 +752,7 @@ mod test {
         let k = prog.create_kernel("test");
         
         let v = ctx.create_buffer_from(&[1], CL_MEM_READ_WRITE);
-        
+
         k.set_arg(0, &v);
         k.set_arg(1, &42);
 
@@ -761,7 +761,7 @@ mod test {
         let v: ~[int] = queue.get(v, ());
 
         expect!(v[0], 43);
-  }
+    }
 
     #[test]
     fn simple_kernel_index() {
@@ -796,6 +796,7 @@ mod test {
 
         let k = prog.create_kernel("test");
         let v = ctx.create_buffer_from(&[1], CL_MEM_READ_WRITE);
+
       
         k.set_arg(0, &v);
 
@@ -860,6 +861,7 @@ mod test {
         let prog = ctx.create_program_from_source(src);
 
         match prog.build(&device) {
+
             Ok(()) => (),
             Err(build_log) => {
                 println!("Error building program:\n");

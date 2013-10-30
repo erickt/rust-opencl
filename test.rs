@@ -2,7 +2,7 @@ extern mod OpenCL;
 
 use std::rt::io;
 use std::rt::io::file;
-use std::rt::io::extensions::ReaderUtil;
+use std::rt::io::Reader;
 use std::str;
 use OpenCL::hl::EventList;
 use OpenCL::mem::Buffer;
@@ -31,6 +31,7 @@ fn main()
 
 	program.build(&device);
 
+
 	let kernel = program.create_kernel("vector_add");
 
 	kernel.set_arg(0, &A);
@@ -38,6 +39,7 @@ fn main()
 	kernel.set_arg(2, &C);
 
 	queue.enqueue_async_kernel(&kernel, 8, None, ()).wait();
+
 
 	let vec_c: ~[int] = queue.get(C, ());
 
