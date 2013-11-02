@@ -13,7 +13,7 @@ use std::ptr;
 use mem::{Put, Get, Write, Read, Buffer, CLBuffer};
 
 pub enum DeviceType {
-      CPU, GPU
+    CPU, GPU
 }
 
 fn convert_device_type(device: DeviceType) -> cl_device_type {
@@ -212,6 +212,14 @@ impl Device {
     }
 }
 
+impl Clone for Device {
+    fn clone(&self) -> Device {
+        Device {
+            id: self.id
+        }
+    }
+}
+
 pub struct Context {
     ctx: cl_context,
 }
@@ -319,6 +327,18 @@ impl Drop for Context
     fn drop(&mut self) {
         unsafe {
             clReleaseContext(self.ctx);
+        }
+    }
+}
+
+impl Clone for Context {
+    #[fixed_stack_segment] #[inline(never)]
+    fn clone(&self) -> Context {
+        unsafe {
+            clRetainContext(self.ctx);
+        }
+        Context {
+            ctx: self.ctx
         }
     }
 }
@@ -454,6 +474,17 @@ impl Drop for CommandQueue
     }
 }
 
+impl Clone for CommandQueue {
+    #[fixed_stack_segment] #[inline(never)]
+    fn clone(&self) -> CommandQueue {
+        unsafe {
+            clRetainCommandQueue(self.cqueue);
+        }
+        CommandQueue {
+            cqueue: self.cqueue
+        }
+    }
+}
 
 pub struct Program
 {
@@ -517,6 +548,18 @@ impl Program
     }
 }
 
+impl Clone for Program {
+    #[fixed_stack_segment] #[inline(never)]
+    fn clone(&self) -> Program {
+        unsafe {
+            clRetainProgram(self.prg);
+        }
+        Program {
+            prg: self.prg
+        }
+    }
+}
+
 pub struct Kernel {
     kernel: cl_kernel,
 }
@@ -535,6 +578,18 @@ impl Kernel {
     pub fn set_arg<T: KernelArg>(&self, i: uint, x: &T)
     {
         set_kernel_arg(self, i as CL::cl_uint, x)
+    }
+}
+
+impl Clone for Kernel {
+    #[fixed_stack_segment] #[inline(never)]
+    fn clone(&self) -> Kernel {
+        unsafe {
+            clRetainKernel(self.kernel);
+        }
+        Kernel {
+            kernel: self.kernel
+        }
     }
 }
 
@@ -1119,4 +1174,38 @@ mod test {
         e.end_time();
     }
 
+    #[test]
+    fn context_clone() {
+        let (_, ctx, _) = util::create_compute_context().unwrap();
+        let _ = ctx.clone();
+    }
+
+    #[test]
+    fn command_queue_clone() {
+        let (_, _, queue) = util::create_compute_context().unwrap();
+        let _ = queue.clone();
+    }
+
+    #[test]
+    fn program_clone() {
+        let src = "__kernel void test() {}";
+
+        let (device, ctx, _) = util::create_compute_context().unwrap();
+        let prog = ctx.create_program_from_source(src);
+        prog.build(&device);
+
+        let _ = prog.clone();
+    }
+
+    #[test]
+    fn kernel_clone() {
+        let src = "__kernel void test() {}";
+
+        let (device, ctx, _) = util::create_compute_context().unwrap();
+        let prog = ctx.create_program_from_source(src);
+        prog.build(&device);
+
+        let k = prog.create_kernel("test");
+        let _ = k.clone();
+    }
 }
