@@ -53,12 +53,38 @@ impl<T: Clone> Array3D<T> {
     }
 }
 
+impl<T: Clone> Clone for Array3D<T> {
+    fn clone(&self) -> Array3D<T> {
+        Array3D {
+            width: self.width,
+            height: self.height,
+            depth: self.depth,
+            dat: self.dat.clone()
+        }
+    }
+}
+
 #[unsafe_destructor]
 impl<T> Drop for Array3D_cl<T> {
     #[fixed_stack_segment] #[inline(never)]
     fn drop(&mut self) {
         unsafe {
             clReleaseMemObject(self.buf);
+        }
+    }
+}
+
+impl<T> Clone for Array3D_cl<T> {
+    #[fixed_stack_segment] #[inline(never)]
+    fn clone(&self) -> Array3D_cl<T> {
+        unsafe {
+            clRetainMemObject(self.buf);
+        }
+        Array3D_cl {
+            width: self.width,
+            height: self.height,
+            depth: self.depth,
+            buf: self.buf
         }
     }
 }
@@ -176,12 +202,35 @@ impl<T: Clone> Array2D<T> {
     }
 }
 
+impl<T: Clone> Clone for Array2D<T> {
+    fn clone(&self) -> Array2D<T> {
+        Array2D {
+            width: self.width,
+            height: self.height,
+            dat: self.dat.clone()
+        }
+    }
+}
+
 #[unsafe_destructor]
 impl<T> Drop for Array2D_cl<T> {
     #[fixed_stack_segment] #[inline(never)]
     fn drop(&mut self) {
         unsafe {
             clReleaseMemObject(self.buf);
+        }
+    }
+}
+impl<T> Clone for Array2D_cl<T> {
+    #[fixed_stack_segment] #[inline(never)]
+    fn clone(&self) -> Array2D_cl<T> {
+        unsafe {
+            clRetainMemObject(self.buf);
+        }
+        Array2D_cl {
+            width: self.width,
+            height: self.height,
+            buf: self.buf
         }
     }
 }
@@ -438,5 +487,27 @@ mod test {
                 }
             }
         }
+    }
+
+    #[test]
+    fn clone_2D()
+    {
+        let (_, ctx, _) = create_compute_context().unwrap();
+        let a = do Array2D::new(8, 8) |_, _| {(0) as i32};
+        let a_cl = ctx.create_buffer_from(&a, CL_MEM_READ_WRITE);
+
+        let _ = a.clone();
+        let _ = a_cl.clone();
+    }
+
+    #[test]
+    fn clone_3D()
+    {
+        let (_, ctx, _) = create_compute_context().unwrap();
+        let a = do Array3D::new(8, 8, 8) |_, _, _| {(0) as i32};
+        let a_cl = ctx.create_buffer_from(&a, CL_MEM_READ_WRITE);
+
+        let _ = a.clone();
+        let _ = a_cl.clone();
     }
 }

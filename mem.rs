@@ -55,6 +55,18 @@ impl<T> Drop for CLBuffer<T> {
     }
 }
 
+impl<T> Clone for CLBuffer<T> {
+    #[fixed_stack_segment] #[inline(never)]
+    fn clone(&self) -> CLBuffer<T> {
+        unsafe {
+            clRetainMemObject(self.cl_buffer);
+        }
+        CLBuffer {
+            cl_buffer: self.cl_buffer
+        }
+    }
+}
+
 impl<T> Buffer<T> for CLBuffer<T> {
     unsafe fn id_ptr(&self) -> *cl_mem 
     {
@@ -359,7 +371,9 @@ mod test {
     use std::unstable::intrinsics;
     use std::vec;
     use mem::{Read, Write, Unique};
-
+    use util::create_compute_context;
+    use CL::CL_MEM_READ_WRITE;
+    
     macro_rules! expect (
         ($test: expr, $expected: expr) => ({
             let test     = $test;
@@ -458,5 +472,13 @@ mod test {
         let mut output : Unique<int> = Unique(~[]); 
         read_write(&input, &mut output);
         expect!(input.unwrap(), output.unwrap());
+    }
+
+    #[test]
+    fn clone_clbuffer()
+    {
+        let (_, ctx, _) = create_compute_context().unwrap();
+        let a = ctx.create_buffer_from(&[0], CL_MEM_READ_WRITE);
+        let _ = a.clone();
     }
 }
