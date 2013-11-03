@@ -492,22 +492,24 @@ mod test {
     #[test]
     fn clone_2D()
     {
-        let (_, ctx, _) = create_compute_context().unwrap();
-        let a = do Array2D::new(8, 8) |_, _| {(0) as i32};
-        let a_cl = ctx.create_buffer_from(&a, CL_MEM_READ_WRITE);
+        do util::test_all_platforms_devices |_, ctx, _| {
+            let a = do Array2D::new(8, 8) |_, _| {(0) as i32};
+            let a_cl = ctx.create_buffer_from(&a, CL_MEM_READ_WRITE);
 
-        let _ = a.clone();
-        let _ = a_cl.clone();
+            let _ = a.clone();
+            let _ = a_cl.clone();
+        }
     }
 
     #[test]
     fn clone_3D()
     {
-        let (_, ctx, _) = create_compute_context().unwrap();
-        let a = do Array3D::new(8, 8, 8) |_, _, _| {(0) as i32};
-        let a_cl = ctx.create_buffer_from(&a, CL_MEM_READ_WRITE);
+        do util::test_all_platforms_devices |_, ctx, _| {
+            let a = do Array3D::new(8, 8, 8) |_, _, _| {(0) as i32};
+            let a_cl = ctx.create_buffer_from(&a, CL_MEM_READ_WRITE);
 
-        let _ = a.clone();
-        let _ = a_cl.clone();
+            let _ = a.clone();
+            let _ = a_cl.clone();
+        }
     }
 }
