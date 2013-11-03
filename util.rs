@@ -67,3 +67,23 @@ pub fn test_all_platforms_devices(test: &fn(Device, Context, CommandQueue))
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use hl::*;
+
+    /* not really a unit test, but will be useful for
+     * verifying bugs in the future */
+    #[test]
+    fn check_opencl() 
+    {
+        let platforms = get_platforms();
+        for p in platforms.iter() {
+            let devices = p.get_devices();
+            for d in devices.iter() {
+                println(format!("{:s}::{:s}", p.name(), d.name()));
+            }
+    }
+    }
+
+}
