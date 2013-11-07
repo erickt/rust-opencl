@@ -287,6 +287,26 @@ impl<'self, T> Read for &'self mut [T]
     }
 }
 
+impl<T> Write for ~[T]
+{
+    fn write(&self, f: &fn(offset: size_t, ptr: *c_void, size: size_t))
+    {
+        do self.as_imm_buf |p, len| {
+            f(0, p as *c_void, (len * mem::size_of::<T>()) as size_t)
+        }
+    }
+}
+
+impl<T> Read for ~[T]
+{
+    fn read(&mut self, f: &fn(offset: size_t, ptr: *mut c_void, size: size_t))
+    {
+        do self.as_mut_buf |p, len| {
+            f(0, p as *mut c_void, (len * mem::size_of::<T>()) as size_t)
+        }
+    }
+}
+
 macro_rules! get_arg (
     ($t:ty) => (impl Get<CLBuffer<$t>, $t> for $t
         {
