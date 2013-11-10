@@ -21,7 +21,7 @@ libOpenCL : $(OPENCL_SRC)
 
 .PHONY: check
 check: opencl-test
-	RUST_THREADS=1 ./opencl-test
+	./opencl-test
 
 opencl-test : libOpenCL test.rs
 	$(RUSTC) -L . test.rs

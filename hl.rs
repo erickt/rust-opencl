@@ -11,6 +11,9 @@ use std::mem;
 use std::cast;
 use std::ptr;
 use mem::{Put, Get, Write, Read, Buffer, CLBuffer};
+use std::unstable::atomics;
+use std::rt::sched::Scheduler;
+use std::rt::local::Local;
 
 pub enum DeviceType {
     CPU, GPU
@@ -23,7 +26,8 @@ fn convert_device_type(device: DeviceType) -> cl_device_type {
     }
 }
 
-struct Platform {
+#[deriving(Clone)]
+pub struct Platform {
     id: cl_platform_id
 }
 
@@ -117,28 +121,59 @@ impl Platform {
     }
 }
 
+// this is a crappy spin lock, to be replaced by
+// https://github.com/mozilla/rust/issues/9105
+// when it is closed.
+static mut _platform_spin_lock: atomics::AtomicFlag = atomics::INIT_ATOMIC_FLAG;
+static mut _platforms: Option<~[Platform]> = None;
+
+fn with_platform_lock<T>(f: &fn() -> T) -> T
+{
+    unsafe {
+        while _platform_spin_lock.test_and_set(atomics::SeqCst)  {
+            let sched: ~Scheduler = Local::take();
+            sched.maybe_yield();
+        }
+    }
+
+    let result = f();
+
+    unsafe {
+        _platform_spin_lock.clear(atomics::SeqCst);
+    }
+
+    result
+}
+
+
 #[fixed_stack_segment] #[inline(never)]
 pub fn get_platforms() -> ~[Platform]
 {
-    let num_platforms = 0;
+    unsafe {
+        do with_platform_lock {
+            if _platforms.is_none() {
+                let num_platforms = 0;
+                
+                let status = clGetPlatformIDs(0,
+                                ptr::null(),
+                                ptr::to_unsafe_ptr(&num_platforms));
+                check(status, "could not get platform count.");
 
-    unsafe
-    {
-        let status = clGetPlatformIDs(0,
-                                      ptr::null(),
-                                      ptr::to_unsafe_ptr(&num_platforms));
-        check(status, "could not get platform count.");
+                let ids = vec::from_elem(num_platforms as uint, 0 as cl_platform_id);
 
-        let ids = vec::from_elem(num_platforms as uint, 0 as cl_platform_id);
-
-        do ids.as_imm_buf |ids, len| {
-            let status = clGetPlatformIDs(len as cl_uint,
-                                          ids,
-                                          ptr::to_unsafe_ptr(&num_platforms));
-            check(status, "could not get platforms.");
-        };
-
-        do ids.map |id| { Platform { id: *id } }
+                do ids.as_imm_buf |ids, len| {
+                    let status = clGetPlatformIDs(len as cl_uint,
+                                    ids,
+                                    ptr::to_unsafe_ptr(&num_platforms));
+                    check(status, "could not get platforms.");
+                }
+                _platforms = Some(do ids.map |id| { Platform { id: *id } });
+            }
+        }
+        match _platforms {
+            Some(ref p) => p.clone(),
+            None => fail!("This should be Some!")
+        }
     }
 }
 
