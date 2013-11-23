@@ -431,6 +431,14 @@ pub static CL_PROFILING_COMMAND_START:                   cl_uint = 0x1282;
 pub static CL_PROFILING_COMMAND_END:                     cl_uint = 0x1283;
 
 
+pub static CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR:         cl_uint = 0x2006;
+pub static CL_DEVICES_FOR_GL_CONTEXT_KHR:                cl_uint = 0x2007;
+pub static CL_GL_CONTEXT_KHR:                            cl_uint = 0x2008;
+pub static CL_EGL_DISPLAY_KHR:                           cl_uint = 0x2009;
+pub static CL_GLX_DISPLAY_KHR:                           cl_uint = 0x200A;
+pub static CL_WGL_HDC_KHR:                               cl_uint = 0x200B;
+pub static CL_CGL_SHAREGROUP_KHR:                        cl_uint = 0x200C;
+
 #[nolink]
 pub mod ll {
   use CL::*;
@@ -835,5 +843,58 @@ pub mod ll {
      * or calling the returned function address.
      */
     pub fn clGetExtensionFunctionAddress(func_name: *libc::c_char);
+
+
+    // these are for the gl_sharing ARB
+    // docs http://www.khronos.org/registry/cl/sdk/1.1/docs/man/xhtml/gl_sharing.html
+    //
+    // since this library does not have a dependency on any opengl library
+    pub fn clCreateFromGLBuffer(context: cl_context,
+                                flags: cl_mem_flags,
+                                bufobj: libc::c_uint,
+                                errorcode_ret: *mut cl_int) -> cl_mem;
+
+    pub fn clCreateFromGLTexture2D(context: cl_context,
+                                   flags: cl_mem_flags,
+                                   texture_target: libc::c_uint,
+                                   miplevel: libc::c_int,
+                                   texture: libc::c_uint,
+                                   errorcode_ret: *mut cl_int) -> cl_mem;
+
+    pub fn clCreateFromGLTexture3D(context: cl_context,
+                                   flags: cl_mem_flags,
+                                   texture_target: libc::c_uint,
+                                   miplevel: libc::c_int,
+                                   texture: libc::c_uint,
+                                   errorcode_ret: *mut cl_int) -> cl_mem;
+
+    pub fn clCreateFromGLRenderbuffer(context: cl_context,
+                                      flags: cl_mem_flags,
+                                      renderbuffer: libc::c_uint,
+                                      errorcode_ret: *mut cl_int) -> cl_mem;
+
+    pub fn clGetGLObjectInfo(memobj: cl_mem,
+                             gl_object_type: *mut libc::c_uint,
+                             gl_object_name: *mut libc::c_uint) -> cl_int;
+
+    pub fn clGetGLTextureInfo(memobj: cl_mem,
+                              param_name: libc::c_uint,
+                              param_value_size: libc::size_t,
+                              param_value: *libc::c_void,
+                              param_value_size_ret: *mut libc::size_t) -> cl_int;
+
+    pub fn clEnqueueAcquireGLObjects(command_queue: cl_command_queue,
+                                     num_objects: cl_uint,
+                                     mem_objects: *cl_mem,
+                                     num_events_in_wait_list: cl_uint,
+                                     event_wait_list: *cl_event,
+                                     cl_event: *mut cl_event) -> cl_int;
+
+    pub fn clEnqueueReleaseGLObjects(command_queue: cl_command_queue,
+                                     num_objects: cl_uint,
+                                     mem_objects: *cl_mem,
+                                     num_events_in_wait_list: cl_uint,
+                                     event_wait_list: *cl_event,
+                                     cl_event: *mut cl_event) -> cl_int;
   }
 }
