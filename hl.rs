@@ -174,7 +174,7 @@ impl Device {
     } }
 
     #[fixed_stack_segment] #[inline(never)]
-	pub fn computeUnits(&self) -> uint {
+	pub fn compute_units(&self) -> uint {
 		unsafe {
 			let mut ct: uint = 0;
             let status = clGetDeviceInfo(
