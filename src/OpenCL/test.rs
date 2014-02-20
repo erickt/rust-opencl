@@ -590,3 +590,61 @@ mod error {
                 ~"CL_INVALID_BUFFER_SIZE");
     }
 }
+
+#[cfg(test)]
+mod map {
+    use OpenCL::hl::*;
+    use OpenCL::CL::*;
+
+    #[test]
+    fn map() {
+        ::test_all_platforms_devices(|_, ctx, queue| {
+            let buffer = ctx.create_buffer_from(&[1, 2], CL_MEM_READ_WRITE);
+            let map = queue.map(buffer);
+            {
+                let slice = map.as_slice();
+                assert!(1 == slice[0]);
+                assert!(2 == slice[1]);
+            }
+            queue.unmap(map);
+        })
+    }
+
+    #[test]
+    fn add_k() {
+        let src = "__kernel void test(__global int *i, long int k) { \
+                   *i += k; \
+                   }";
+
+        ::test_all_platforms_devices(|device, ctx, queue| {
+            let prog = ctx.create_program_from_source(src);
+            prog.build(&device).unwrap();
+
+            let k = prog.create_kernel("test");
+
+            let v = ctx.create_buffer_from(&[1], CL_MEM_READ_WRITE);
+            let mut map = queue.map(v);
+
+            k.set_arg(0, &map);
+            k.set_arg(1, &42);
+
+            queue.enqueue_async_kernel(&k, 1, None, ()).wait();
+
+            {
+                let slice = map.as_mut_slice();
+                expect!(slice[0], 43);
+                slice[0] = 0;
+                expect!(slice[0], 0);
+            }
+
+            queue.enqueue_async_kernel(&k, 1, None, ()).wait();
+
+            {
+                let slice = map.as_slice();
+                expect!(slice[0], 42);
+            }
+
+            queue.unmap(map);
+        })
+    }
+}

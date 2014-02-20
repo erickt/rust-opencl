@@ -27,3 +27,4 @@ pub mod hl;
 pub mod util;
 pub mod mem;
 pub mod array;
+pub mod map;
