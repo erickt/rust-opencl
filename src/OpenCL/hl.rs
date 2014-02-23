@@ -6,13 +6,13 @@ use std::mem;
 use std::cast;
 use std::ptr;
 use sync::mutex;
+use std::vec::raw::mut_buf_as_slice;
 
 use CL;
 use CL::*;
 use CL::ll::*;
 use error::check;
 use mem::{Put, Get, Write, Read, Buffer, CLBuffer};
-use map::Mapping;
 
 pub enum DeviceType {
       CPU, GPU
@@ -430,39 +430,33 @@ impl CommandQueue
         }
     }
 
-    pub fn map<T, B: Buffer<T>>(&self, mem: B) -> Mapping<B, T>
+    pub fn map<T, B: Buffer<T>, U>(&self, mem: &B, f: |&mut [T]| -> U) -> U
     {
         unsafe {
-                let mut status = CL_SUCCESS as cl_int;
-                let ptr = clEnqueueMapBuffer(self.cqueue,
-                                             mem.id(),
-                                             CL_TRUE,
-                                             CL_MAP_READ | CL_MAP_WRITE,
-                                             0 as libc::size_t,
-                                             mem.byte_len(),
-                                             0,
-                                             ptr::null(),
-                                             ptr::null(),
-                                             &mut status);
+            let mut status = CL_SUCCESS as cl_int;
+            let ptr = clEnqueueMapBuffer(self.cqueue,
+                                         mem.id(),
+                                         CL_TRUE,
+                                         CL_MAP_READ | CL_MAP_WRITE,
+                                         0 as libc::size_t,
+                                         mem.byte_len(),
+                                         0,
+                                         ptr::null(),
+                                         ptr::null(),
+                                         &mut status);
 
-                check(status, "Failed to map buffer");
-                Mapping::new(mem, ptr as *mut T)
-        }
-    }
+            check(status, "Failed to map buffer");
 
-    pub fn unmap<T, B: Buffer<T>>(&self, map: Mapping<B, T>) -> B
-    {
-        unsafe {
-                let mut map = map;
-                clEnqueueUnmapMemObject(self.cqueue,
-                                             map.id(),
-                                             map.ptr as *libc::c_void,
-                                             0,
-                                             ptr::null(),
-                                             ptr::null());
+            let res = mut_buf_as_slice(ptr as *mut T, mem.len(), f);
+ 
+            clEnqueueUnmapMemObject(self.cqueue,
+                                     mem.id(),
+                                     ptr as *libc::c_void,
+                                     0,
+                                     ptr::null(),
+                                     ptr::null());
 
-                map.ptr = ptr::mut_null();
-                map.buffer
+            res
         }
     }
 }

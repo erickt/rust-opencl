@@ -600,13 +600,11 @@ mod map {
     fn map() {
         ::test_all_platforms_devices(|_, ctx, queue| {
             let buffer = ctx.create_buffer_from(&[1, 2], CL_MEM_READ_WRITE);
-            let map = queue.map(buffer);
-            {
-                let slice = map.as_slice();
+
+            queue.map(&buffer, |slice| {
                 assert!(1 == slice[0]);
                 assert!(2 == slice[1]);
-            }
-            queue.unmap(map);
+            });
         })
     }
 
@@ -623,28 +621,23 @@ mod map {
             let k = prog.create_kernel("test");
 
             let v = ctx.create_buffer_from(&[1], CL_MEM_READ_WRITE);
-            let mut map = queue.map(v);
 
-            k.set_arg(0, &map);
+            k.set_arg(0, &v);
             k.set_arg(1, &42);
 
             queue.enqueue_async_kernel(&k, 1, None, ()).wait();
 
-            {
-                let slice = map.as_mut_slice();
-                expect!(slice[0], 43);
+            queue.map(&v, |slice| {
+                assert!(43 == slice[0]);
                 slice[0] = 0;
-                expect!(slice[0], 0);
-            }
+                assert!(0 == slice[0]);
+            });
 
             queue.enqueue_async_kernel(&k, 1, None, ()).wait();
 
-            {
-                let slice = map.as_slice();
-                expect!(slice[0], 42);
-            }
-
-            queue.unmap(map);
+            queue.map(&v, |slice| {
+                assert!(42 == slice[0]);
+            });
         })
     }
 }
