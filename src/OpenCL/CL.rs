@@ -777,7 +777,7 @@ pub mod ll {
                           num_events_in_wait_list: cl_uint,
                           event_wait_list: *cl_event,
                           event: *cl_event,
-                          errorcode_ret: *cl_int);
+                          errorcode_ret: *cl_int) -> *libc::c_void;
     pub fn clEnqueueMapImage(command_queue: cl_command_queue,
                          image: cl_mem,
                          blocking_map: cl_bool,

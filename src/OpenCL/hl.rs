@@ -9,6 +9,7 @@ use std::vec::Vec;
 use std::str;
 use std::mem;
 use std::ptr;
+use std::slice::raw::mut_buf_as_slice;
 use sync::mutex;
 use mem::{Put, Get, Write, Read, Buffer, CLBuffer};
 
@@ -140,6 +141,28 @@ pub fn get_platforms() -> Vec<Platform>
     }
 }
 
+pub fn create_context_with_properties(dev: &[Device], prop: &[cl_context_properties]) -> Context
+{
+    unsafe
+    {
+        // TODO: Support for multiple devices
+        let errcode = 0;
+        let dev: ~[cl_device_id] = dev.iter().map(|dev| dev.id).collect();
+
+        // TODO: Proper error messages
+        let ctx = clCreateContext(&prop[0],
+                                  dev.len() as u32,
+                                  &dev[0],
+                                  cast::transmute(ptr::null::<||>()),
+                                  ptr::null(),
+                                  (&errcode));
+
+        check(errcode, "Failed to create opencl context!");
+
+        Context { ctx: ctx }
+    }  
+}
+
 pub struct Device {
     id: cl_device_id
 }
@@ -170,7 +193,7 @@ impl Device {
         }
     }
 
-	pub fn computeUnits(&self) -> uint {
+	pub fn compute_units(&self) -> uint {
 		unsafe {
 			let mut ct: uint = 0;
             let status = clGetDeviceInfo(
@@ -183,7 +206,6 @@ impl Device {
 			return ct;
 		}
 	}
-
 
     pub fn create_context(&self) -> Context
     {
@@ -208,7 +230,7 @@ impl Device {
 }
 
 pub struct Context {
-    ctx: cl_context,
+    pub ctx: cl_context,
 }
 
 impl Context {
@@ -407,6 +429,30 @@ impl CommandQueue
         }
     }
 
+    pub fn write_async<U: Write, T, E: EventList, B: Buffer<T>>(&self, mem: &B, write: &U, event: E) -> Event
+    {
+        let mut out_event = None;
+        unsafe {
+            event.as_event_list(|evt, evt_len| {
+                write.write(|offset, p, len| {
+                    let e: cl_event = ptr::null();
+                    let err = clEnqueueWriteBuffer(self.cqueue,
+                                                   mem.id(),
+                                                   CL_FALSE,
+                                                   offset as libc::size_t,
+                                                   len as libc::size_t,
+                                                   p as *libc::c_void,
+                                                   evt_len,
+                                                   evt,
+                                                   &e);
+                    out_event = Some(e);
+                    check(err, "Failed to write buffer");
+                })
+            })
+        }
+        Event { event: out_event.unwrap() }
+    }
+
     pub fn read<T, U: Read, E: EventList, B: Buffer<T>>(&self, mem: &B, read: &mut U, event: E)
     {
         unsafe {
@@ -425,6 +471,34 @@ impl CommandQueue
                     check(err, "Failed to read buffer");
                 })
             })
+        }
+    }
+
+    pub fn map_mut<T, U, E: EventList, B: Buffer<T>>(&self, mem: &B, event: E, f: |&mut [T]| -> U) -> U {
+        unsafe {
+            event.as_event_list(|evt, evt_len| {
+                let err = 0;
+                let ptr = clEnqueueMapBuffer(self.cqueue,
+                                             mem.id(),
+                                             CL_TRUE,
+                                             CL_MAP_READ | CL_MAP_WRITE,
+                                             0,
+                                             mem.byte_len(),
+                                             evt_len,
+                                             evt,
+                                             ptr::null(),
+                                             &err) as *mut T;
+                check(err, "Failed to map buffer");
+                let ret = mut_buf_as_slice(ptr, mem.len(), |v| f(v));
+                let err = clEnqueueUnmapMemObject(self.cqueue,
+                                                  mem.id(),
+                                                  ptr as *libc::c_void,
+                                                  0,
+                                                  ptr::null(),
+                                                  ptr::null());
+                check(err, "Failed to unmap buffer");
+                ret
+            })            
         }
     }
 }
