@@ -147,12 +147,12 @@ pub fn create_context_with_properties(dev: &[Device], prop: &[cl_context_propert
     {
         // TODO: Support for multiple devices
         let errcode = 0;
-        let dev: ~[cl_device_id] = dev.iter().map(|dev| dev.id).collect();
+        let dev: Vec<cl_device_id> = dev.iter().map(|dev| dev.id).collect();
 
         // TODO: Proper error messages
         let ctx = clCreateContext(&prop[0],
                                   dev.len() as u32,
-                                  &dev[0],
+                                  dev.get(0),
                                   cast::transmute(ptr::null::<||>()),
                                   ptr::null(),
                                   (&errcode));
