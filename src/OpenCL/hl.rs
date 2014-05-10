@@ -30,7 +30,7 @@ pub struct Platform {
 }
 
 impl Platform {
-    fn get_devices_internal(&self, dtype: cl_device_type) -> ~[Device]
+    fn get_devices_internal(&self, dtype: cl_device_type) -> Vec<Device>
     {
         unsafe
         {
@@ -48,12 +48,12 @@ impl Platform {
         }
     }
 
-    pub fn get_devices(&self) -> ~[Device]
+    pub fn get_devices(&self) -> Vec<Device>
     {
         self.get_devices_internal(CL_DEVICE_TYPE_ALL)
     }
 
-    pub fn get_devices_by_types(&self, types: &[DeviceType]) -> ~[Device]
+    pub fn get_devices_by_types(&self, types: &[DeviceType]) -> Vec<Device>
     {
         let mut dtype = 0;
         for &t in types.iter() {
@@ -116,7 +116,7 @@ impl Platform {
 // will cause the implantation to return invalid status. 
 static mut platforms_mutex: mutex::StaticMutex = mutex::MUTEX_INIT;
 
-pub fn get_platforms() -> ~[Platform]
+pub fn get_platforms() -> Vec<Platform>
 {
     let num_platforms = 0;
 
@@ -148,12 +148,12 @@ pub fn create_context_with_properties(dev: &[Device], prop: &[cl_context_propert
     {
         // TODO: Support for multiple devices
         let errcode = 0;
-        let dev: ~[cl_device_id] = dev.iter().map(|dev| dev.id).collect();
+        let dev: Vec<cl_device_id> = dev.iter().map(|dev| dev.id).collect();
 
         // TODO: Proper error messages
         let ctx = clCreateContext(&prop[0],
                                   dev.len() as u32,
-                                  &dev[0],
+                                  dev.get(0),
                                   cast::transmute(ptr::null::<||>()),
                                   ptr::null(),
                                   (&errcode));
@@ -345,7 +345,7 @@ impl<'r, T> KernelArg for &'r Buffer<T> {
     }
 }
 
-impl<T> KernelArg for ~Buffer<T> {
+impl<T> KernelArg for Box<Buffer<T>> {
     fn get_value(&self) -> (libc::size_t, *libc::c_void)
     {
         unsafe {
@@ -742,7 +742,7 @@ impl<'r> EventList for &'r [Event] {
     fn as_event_list<T>(&self, f: |*cl_event, cl_uint| -> T) -> T
     {
         /* this is wasteful */
-        let events = self.iter().map(|event| event.event).collect::<~[*libc::c_void]>();
+        let events = self.iter().map(|event| event.event).collect::<Vec<*libc::c_void>>();
 
         f(events.as_ptr() as **libc::c_void, events.len() as cl_uint)
     }
