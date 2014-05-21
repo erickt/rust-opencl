@@ -153,7 +153,7 @@ pub fn create_context_with_properties(dev: &[Device], prop: &[cl_context_propert
         let ctx = clCreateContext(&prop[0],
                                   dev.len() as u32,
                                   dev.get(0),
-                                  cast::transmute(ptr::null::<||>()),
+                                  mem::transmute(ptr::null::<||>()),
                                   ptr::null(),
                                   (&errcode));
 
