@@ -356,7 +356,7 @@ impl<T> KernelArg for Box<Buffer<T>> {
 
 
 pub struct CommandQueue {
-    cqueue: cl_command_queue
+    pub cqueue: cl_command_queue
 }
 
 impl CommandQueue
@@ -500,6 +500,10 @@ impl CommandQueue
                 ret
             })            
         }
+    }
+
+    pub fn finish(&self) {
+      unsafe { clFinish(self.cqueue); }
     }
 }
 
@@ -663,7 +667,7 @@ pub fn set_kernel_arg<T: KernelArg>(kernel: & Kernel,
 
 pub struct Event
 {
-    event: cl_event,
+    pub event: cl_event,
 }
 
 impl Event {
