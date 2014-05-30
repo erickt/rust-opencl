@@ -69,19 +69,19 @@ pub fn try_convert(status: cl_int) -> Option<CLStatus> {
 pub fn convert(status: cl_int) -> CLStatus {
     match try_convert(status) {
         Some(s) => s,
-        None => fail!(format!("Uknown OpenCL Status Code: {:?}", status))
+        None => fail!(format!("Uknown OpenCL Status Code: {}", status))
     }
 }
 
-fn error_str(status: cl_int) -> ~str {
+fn error_str(status: cl_int) -> String {
     match try_convert(status) {
         Some(s) => s.to_str(),
-        None => format!("Unknown Error: {:?}", status)
+        None => format!("Unknown Error: {}", status)
     }
 }
 
 pub fn check(status: cl_int, message: &str) {
     if status != CL_SUCCESS as cl_int {
-        fail!(format!("{:?} ({:?})", message, error_str(status)))
+        fail!(format!("{:s} ({:s})", message, error_str(status).as_slice()))
     }
 }

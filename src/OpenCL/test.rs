@@ -3,6 +3,7 @@
 #![feature(globs)]
 
 extern crate std;
+extern crate debug;
 extern crate OpenCL = "OpenCL#0.2";
 
 use OpenCL::hl::*;
@@ -586,6 +587,6 @@ mod error {
     #[test]
     fn convert_to_str() {
         expect!(convert(CL_INVALID_BUFFER_SIZE as cl_int).to_str(),
-                "CL_INVALID_BUFFER_SIZE".to_owned());
+                "CL_INVALID_BUFFER_SIZE".to_string());
     }
 }
