@@ -83,8 +83,7 @@ pub struct cl_buffer_region {
 
 
 /// OpenCL error codes.
-#[deriving(Eq)]
-#[deriving(Show)]
+#[deriving(PartialEq, Show)]
 pub enum CLStatus {
     CL_SUCCESS = 0,
     CL_DEVICE_NOT_FOUND = -1,
