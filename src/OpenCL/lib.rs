@@ -5,12 +5,13 @@
 #![feature(managed_boxes)]
 #![feature(link_args)]
 #![feature(phase)]
+#![feature(unsafe_destructor)]
 
 //! OpenCL bindings for Rust.
 
 extern crate libc;
 extern crate sync;
-#[phase(syntax, link)] extern crate log;
+#[phase(plugin, link)] extern crate log;
 
 #[link(name = "OpenCL", kind = "framework")]
 #[cfg(target_os = "macos")]
