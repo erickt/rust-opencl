@@ -179,7 +179,7 @@ impl Device {
                 (&mut size));
             check(status, "Could not determine name length");
             
-            let mut buf = Vec::from_elem(size as uint, 0);
+            let mut buf = Vec::from_elem(size as uint, 0i);
             
             let status = clGetDeviceInfo(
                 self.id,
